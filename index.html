@@ -7,21 +7,65 @@
   <style>
     body { font-family: sans-serif; text-align: center; padding: 20px; }
     #balance { font-size: 32px; font-weight: bold; color: #0F8B8D; }
+    #house { min-height: 70px; font-size: 48px; border: 2px dashed #999; border-radius: 12px; padding: 10px; margin: 16px 0; }
+    .item { display: flex; align-items: center; justify-content: space-between; background: #eee; border-radius: 10px; padding: 10px 14px; margin: 8px 0; text-align: right; }
+    button { font-size: 16px; padding: 8px 14px; border: 0; border-radius: 8px; background: #0F8B8D; color: white; }
   </style>
 </head>
 <body>
   <h1>خانه من 🏠</h1>
-  <p>پول شما:</p>
   <div id="balance"></div>
+  <div id="house"></div>
+  <h2>فروشگاه</h2>
+  <div id="shop"></div>
 
   <script>
     Telegram.WebApp.ready();
     Telegram.WebApp.expand();
 
     let balance = 1000000;
+    let owned = [];
 
-    document.getElementById("balance").textContent =
-      balance.toLocaleString("fa-IR") + " تومان";
+    const items = [
+      { name: "کاناپه", icon: "🛋️", price: 250000 },
+      { name: "تخت", icon: "🛏️", price: 300000 },
+      { name: "تلویزیون", icon: "📺", price: 180000 }
+    ];
+
+    function buy(index) {
+      const item = items[index];
+      if (owned.includes(index)) return;
+      if (balance < item.price) {
+        Telegram.WebApp.showAlert("پول کافی نیست");
+        return;
+      }
+      balance = balance - item.price;
+      owned.push(index);
+      draw();
+    }
+
+    function draw() {
+      document.getElementById("balance").textContent =
+        balance.toLocaleString("fa-IR") + " تومان";
+
+      const house = document.getElementById("house");
+      if (owned.length === 0) {
+        house.textContent = "خانه خالی است";
+        house.style.fontSize = "16px";
+      } else {
+        house.textContent = owned.map(i => items[i].icon).join(" ");
+        house.style.fontSize = "48px";
+      }
+
+      document.getElementById("shop").innerHTML = items.map((item, i) => `
+        <div class="item">
+          <span>${item.icon} ${item.name}<br>${item.price.toLocaleString("fa-IR")} تومان</span>
+          <button onclick="buy(${i})">${owned.includes(i) ? "خریده‌ای" : "بخر"}</button>
+        </div>
+      `).join("");
+    }
+
+    draw();
   </script>
 </body>
 </html>
