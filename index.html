@@ -11,15 +11,14 @@
     #stage { position: fixed; bottom: 0; left: 50%; transform: translateX(-50%); }
     #stage > img.bg { width: 100%; height: 100%; display: block; }
 
-    .piece { position: absolute; }
-    .piece img { display: block; width: 100%; height: auto; }
+    .piece { position: absolute; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+    .piece img { display: block; width: 100%; height: auto; -webkit-user-drag: none; pointer-events: none; }
     .hidden { display: none !important; }
     .shadow { position: absolute; left: 4%; right: 4%; bottom: -3%; height: 10%; z-index: -1;
               background: radial-gradient(ellipse at center, rgba(0,0,0,.38) 0%, rgba(0,0,0,0) 70%); }
 
-    #item-bed  { left: 25%;   bottom: 28%; width: 44%; z-index: 2; }
-    #item-sofa { left: 17%;   bottom: 9%;  width: 66%; z-index: 3; }
-    #item-tv   { left: 69.5%; bottom: 33%; width: 21%; z-index: 1; }
+    .piece.sel img { filter: brightness(1.08) drop-shadow(0 0 8px rgba(255,255,255,.95)); }
+    .piece.moving { outline: 2px dashed #fff; outline-offset: 4px; touch-action: none; }
 
     #item-tv img.tvimg { width: 84%; margin: 0 auto -1px; }
     .console { position: relative; width: 100%; height: 0; padding-bottom: 30%;
@@ -37,6 +36,18 @@
     .hud { position: fixed; top: 12px; z-index: 20; padding: 10px 16px; border-radius: 22px; font-size: 16px; font-weight: bold; border: 0; box-shadow: 0 2px 10px rgba(0,0,0,.3); }
     #shopBtn { left: 12px; background: #fff; color: #333; }
     #balance { right: 12px; background: #0F8B8D; color: #fff; }
+
+    /* نوار پایین برای فروش و جابهجایی */
+    #bar { position: fixed; left: 12px; right: 12px; bottom: 16px; z-index: 25; background: rgba(255,255,255,.96);
+           border-radius: 18px; padding: 12px; display: flex; flex-wrap: wrap; align-items: center; gap: 8px;
+           box-shadow: 0 4px 16px rgba(0,0,0,.3); }
+    .bartitle { width: 100%; font-weight: bold; text-align: center; font-size: 14px; color: #333; }
+    .b { flex: 1; font-size: 15px; padding: 10px 8px; border: 0; border-radius: 12px; background: #0F8B8D; color: #fff; font-family: inherit; }
+    .b small { display: block; font-size: 11px; opacity: .9; }
+    .b.sell { background: #D9534F; }
+    .b.ok { background: #2E9B4F; }
+    .b.close { flex: 0 0 48px; background: #ddd; color: #444; }
+    #size { flex: 2; direction: ltr; min-width: 120px; }
 
     #dim { position: fixed; inset: 0; background: rgba(0,0,0,.4); opacity: 0; pointer-events: none; transition: opacity .3s; z-index: 30; }
     #dim.open { opacity: 1; pointer-events: auto; }
@@ -57,7 +68,7 @@
 <body>
 
   <div id="stage">
-    <img class="bg" id="bg" src="room.jpg" alt="">
+    <img class="bg" id="bg" src="room.jpeg" alt="">
 
     <div class="piece hidden" id="item-tv">
       <img class="tvimg" src="tv.webp" alt="">
@@ -79,6 +90,8 @@
   <button class="hud" id="shopBtn" onclick="openShop()">🛒 فروشگاه</button>
   <div class="hud" id="balance"></div>
 
+  <div id="bar" class="hidden"></div>
+
   <div id="dim" onclick="closeShop()"></div>
   <div id="panel">
     <div class="phead">
@@ -96,6 +109,7 @@
       tg.expand();
     }
     const canSave = tg && tg.initData && tg.isVersionAtLeast("6.9");
+    const stage = document.getElementById("stage");
 
     let ASPECT = 1179 / 2085;
 
@@ -103,7 +117,6 @@
       const W = window.innerWidth;
       const H = window.innerHeight;
       const h = Math.max(H, W / ASPECT);
-      const stage = document.getElementById("stage");
       stage.style.height = h + "px";
       stage.style.width = (h * ASPECT) + "px";
     }
@@ -125,6 +138,9 @@
     const START = 1000000;
     let balance = START;
     let owned = [];
+    let pos = {};            // جای هر وسیله: x (فاصله از چپ)، y (فاصله از پایین)، w (عرض) به درصد
+    let selectedId = null;
+    let mode = "menu";       // menu یا move
 
     const items = [
       { id: "bed",  name: "تخت",      img: "bed.webp",  price: 300000 },
@@ -132,9 +148,19 @@
       { id: "tv",   name: "تلویزیون", img: "tv.webp",   price: 180000 }
     ];
 
+    // جای اولیهی وسایل وقتی تازه خریده می‌شوند
+    const DEFAULTS = {
+      bed:  { x: 25,   y: 28, w: 44 },
+      sofa: { x: 17,   y: 9,  w: 66 },
+      tv:   { x: 69.5, y: 33, w: 21 }
+    };
+
+    const fa = n => Number(n).toLocaleString("fa-IR");
+
+    // ---------- ذخیره و بازیابی ----------
     function save() {
       if (canSave) {
-        tg.CloudStorage.setItem("game2", JSON.stringify({ balance: balance, owned: owned }));
+        tg.CloudStorage.setItem("game2", JSON.stringify({ balance: balance, owned: owned, pos: pos }));
       }
     }
 
@@ -146,6 +172,7 @@
               const d = JSON.parse(value);
               balance = d.balance;
               owned = d.owned;
+              pos = d.pos || {};
             } catch (e) {}
           }
           drawAll();
@@ -155,7 +182,9 @@
       }
     }
 
+    // ---------- فروشگاه ----------
     function openShop() {
+      clearSelection();
       document.getElementById("panel").classList.add("open");
       document.getElementById("dim").classList.add("open");
     }
@@ -169,6 +198,7 @@
       if (!item || owned.includes(id) || balance < item.price) return;
       balance = balance - item.price;
       owned.push(id);
+      pos[id] = Object.assign({}, DEFAULTS[id]);
       save();
       drawAll(id);
       closeShop();
@@ -178,22 +208,170 @@
     function resetGame() {
       balance = START;
       owned = [];
+      pos = {};
+      clearSelection();
       save();
       drawAll();
     }
 
+    // ---------- جای وسایل ----------
+    function clampPos(p) {
+      p.x = Math.min(Math.max(p.x, -p.w * 0.3), 100 - p.w * 0.7);
+      p.y = Math.min(Math.max(p.y, -3), 85);
+    }
+
+    function applyPos(id) {
+      const el = document.getElementById("item-" + id);
+      const p = pos[id];
+      if (!el || !p) return;
+      el.style.left = p.x + "%";
+      el.style.bottom = p.y + "%";
+      el.style.width = p.w + "%";
+      el.style.zIndex = 100 - Math.round(p.y); // هرچه پایین‌تر، جلوتر
+    }
+
+    // ---------- انتخاب وسیله ----------
+    function selectPiece(id) {
+      clearSelection();
+      selectedId = id;
+      mode = "menu";
+      document.getElementById("item-" + id).classList.add("sel");
+      renderBar();
+    }
+
+    function clearSelection() {
+      if (selectedId && mode === "move") save();
+      document.querySelectorAll(".piece").forEach(function (el) {
+        el.classList.remove("sel");
+        el.classList.remove("moving");
+      });
+      selectedId = null;
+      mode = "menu";
+      renderBar();
+    }
+
+    function startMove() {
+      mode = "move";
+      document.getElementById("item-" + selectedId).classList.add("moving");
+      renderBar();
+    }
+
+    function finishMove() {
+      save();
+      mode = "menu";
+      clearSelection();
+    }
+
+    function resizeSelected(v) {
+      const p = pos[selectedId];
+      if (!p) return;
+      const newW = Number(v);
+      const center = p.x + p.w / 2;
+      p.w = newW;
+      p.x = center - newW / 2;
+      clampPos(p);
+      applyPos(selectedId);
+    }
+
+    function askConfirm(msg, cb) {
+      if (tg && tg.initData && tg.isVersionAtLeast("6.2")) {
+        tg.showConfirm(msg, cb);
+      } else {
+        cb(window.confirm(msg));
+      }
+    }
+
+    function sellSelected() {
+      const id = selectedId;
+      const item = items.find(i => i.id === id);
+      if (!item) return;
+      askConfirm("«" + item.name + "» فروخته شود و " + fa(item.price) + " تومان به حسابتان برگردد؟", function (ok) {
+        if (!ok) return;
+        balance += item.price;
+        owned = owned.filter(x => x !== id);
+        delete pos[id];
+        clearSelection();
+        save();
+        drawAll();
+        if (tg && tg.HapticFeedback) tg.HapticFeedback.notificationOccurred("success");
+      });
+    }
+
+    function renderBar() {
+      const bar = document.getElementById("bar");
+      if (!selectedId) { bar.classList.add("hidden"); bar.innerHTML = ""; return; }
+      const item = items.find(i => i.id === selectedId);
+      bar.classList.remove("hidden");
+      if (mode === "menu") {
+        bar.innerHTML = `
+          <div class="bartitle">${item.name}</div>
+          <button class="b sell" onclick="sellSelected()">💰 فروش<small>+${fa(item.price)} تومان</small></button>
+          <button class="b" onclick="startMove()">✋ جابه‌جایی</button>
+          <button class="b close" onclick="clearSelection()">✕</button>`;
+      } else {
+        bar.innerHTML = `
+          <div class="bartitle">${item.name}: وسیله را با انگشت بکشید</div>
+          <input id="size" type="range" min="8" max="95" step="1" value="${Math.round(pos[selectedId].w)}" oninput="resizeSelected(this.value)">
+          <button class="b ok" onclick="finishMove()">✔ تأیید</button>`;
+      }
+    }
+
+    // ---------- لمس و کشیدن ----------
+    let drag = null;
+
+    document.querySelectorAll(".piece").forEach(function (el) {
+      const id = el.id.replace("item-", "");
+
+      el.addEventListener("click", function (ev) {
+        ev.stopPropagation();
+        if (mode === "move") return;
+        if (!owned.includes(id)) return;
+        selectPiece(id);
+      });
+
+      el.addEventListener("pointerdown", function (ev) {
+        if (mode !== "move" || selectedId !== id) return;
+        const r = stage.getBoundingClientRect();
+        drag = { id: id, sx: ev.clientX, sy: ev.clientY, x: pos[id].x, y: pos[id].y, W: r.width, H: r.height };
+        el.setPointerCapture(ev.pointerId);
+        ev.preventDefault();
+      });
+
+      el.addEventListener("pointermove", function (ev) {
+        if (!drag || drag.id !== id) return;
+        const p = pos[id];
+        p.x = drag.x + (ev.clientX - drag.sx) / drag.W * 100;
+        p.y = drag.y - (ev.clientY - drag.sy) / drag.H * 100;
+        clampPos(p);
+        applyPos(id);
+      });
+
+      const end = function () { drag = null; };
+      el.addEventListener("pointerup", end);
+      el.addEventListener("pointercancel", end);
+    });
+
+    // لمس جای خالی اتاق: بستن منوی انتخاب (نه در حالت جابه‌جایی)
+    stage.addEventListener("click", function () {
+      if (selectedId && mode === "menu") clearSelection();
+    });
+
+    // ---------- نمایش ----------
     function drawAll(newId) {
-      document.getElementById("balance").textContent =
-        "🪙 " + balance.toLocaleString("fa-IR") + " تومان";
+      document.getElementById("balance").textContent = "🪙 " + fa(balance) + " تومان";
 
       items.forEach(function (item) {
         const el = document.getElementById("item-" + item.id);
         const has = owned.includes(item.id);
         el.classList.toggle("hidden", !has);
         el.classList.remove("drop");
-        if (has && item.id === newId) {
-          void el.getBoundingClientRect();
-          el.classList.add("drop");
+        if (has) {
+          if (!pos[item.id]) pos[item.id] = Object.assign({}, DEFAULTS[item.id]);
+          applyPos(item.id);
+          if (item.id === newId) {
+            void el.getBoundingClientRect();
+            el.classList.add("drop");
+          }
         }
       });
 
@@ -206,7 +384,7 @@
             <img class="thumb" src="${item.img}" alt="">
             <div class="info">
               <div>${item.name}</div>
-              <div class="price">${item.price.toLocaleString("fa-IR")} تومان</div>
+              <div class="price">${fa(item.price)} تومان</div>
             </div>
             <button class="buy" onclick="buy('${item.id}')" ${has || poor ? "disabled" : ""}>${label}</button>
           </div>`;
