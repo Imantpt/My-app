@@ -2,73 +2,258 @@
 <html lang="fa" dir="rtl">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
   <style>
-    body { font-family: sans-serif; text-align: center; padding: 20px; background: #FFE4EC; }
-    #top { text-align: right; }
-    #balance { font-size: 24px; font-weight: bold; color: #0F8B8D; }
-    #house { min-height: 70px; font-size: 48px; border: 2px dashed #999; border-radius: 12px; padding: 10px; margin: 16px 0; }
-    .item { display: flex; align-items: center; justify-content: space-between; background: white; border-radius: 10px; padding: 10px 14px; margin: 8px 0; text-align: right; }
-    button { font-size: 16px; padding: 8px 14px; border: 0; border-radius: 8px; background: #0F8B8D; color: white; }
+    * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+    html, body { margin: 0; height: 100%; overflow: hidden; background: #E6D5C3; font-family: sans-serif; }
+    #room { position: fixed; inset: 0; width: 100%; height: 100%; }
+
+    .hud { position: fixed; top: 12px; z-index: 5; padding: 10px 16px; border-radius: 22px; font-size: 16px; font-weight: bold; border: 0; box-shadow: 0 2px 8px rgba(0,0,0,.25); }
+    #shopBtn { left: 12px; background: #fff; color: #333; }
+    #balance { right: 12px; background: #0F8B8D; color: #fff; }
+
+    #dim { position: fixed; inset: 0; background: rgba(0,0,0,.4); opacity: 0; pointer-events: none; transition: opacity .3s; z-index: 8; }
+    #dim.open { opacity: 1; pointer-events: auto; }
+    #panel { position: fixed; left: 0; right: 0; bottom: 0; max-height: 75%; overflow-y: auto; background: #FFE4EC; border-radius: 22px 22px 0 0; padding: 16px; z-index: 10; transform: translateY(105%); transition: transform .3s; box-shadow: 0 -4px 16px rgba(0,0,0,.25); }
+    #panel.open { transform: none; }
+    .phead { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+    .phead h2 { margin: 0; }
+    .x { background: transparent; border: 0; font-size: 22px; color: #555; }
+    .item { display: flex; align-items: center; gap: 12px; background: #fff; border-radius: 12px; padding: 10px 14px; margin: 8px 0; }
+    .item .icon { font-size: 34px; }
+    .item .info { flex: 1; }
+    .item .price { font-size: 13px; color: #777; }
+    .buy { font-size: 15px; padding: 9px 14px; border: 0; border-radius: 10px; background: #0F8B8D; color: #fff; }
+    .buy:disabled { background: #D5DBE6; color: #777; }
+    #reset { display: block; margin: 18px auto 0; background: transparent; border: 0; color: #888; text-decoration: underline; font-size: 14px; }
+
+    .drop { animation: drop .6s ease-out; }
+    @keyframes drop { from { opacity: 0; transform: translateY(-40px); } to { opacity: 1; transform: translateY(0); } }
   </style>
 </head>
 <body>
-  <div id="top">
-    <div id="balance"></div>
+
+  <svg id="room" viewBox="0 0 360 640" preserveAspectRatio="xMidYMid slice">
+    <defs>
+      <linearGradient id="gWall" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0" stop-color="#F6EDE3"/><stop offset="1" stop-color="#E6D5C3"/>
+      </linearGradient>
+      <linearGradient id="gFloor" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0" stop-color="#C99B6D"/><stop offset="1" stop-color="#A97C50"/>
+      </linearGradient>
+      <linearGradient id="gSky" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0" stop-color="#9ED0F0"/><stop offset="1" stop-color="#E4F3FB"/>
+      </linearGradient>
+      <linearGradient id="gScreen" x1="0" y1="0" x2="1" y2="1">
+        <stop offset="0" stop-color="#2E4A7A"/><stop offset="1" stop-color="#1B2A47"/>
+      </linearGradient>
+      <radialGradient id="gGlow" cx="0.5" cy="0.5" r="0.5">
+        <stop offset="0" stop-color="#FFE9A8" stop-opacity="0.7"/>
+        <stop offset="1" stop-color="#FFE9A8" stop-opacity="0"/>
+      </radialGradient>
+    </defs>
+
+    <!-- دیوار و کف -->
+    <rect x="0" y="0" width="360" height="360" fill="url(#gWall)"/>
+    <rect x="0" y="360" width="360" height="280" fill="url(#gFloor)"/>
+    <rect x="0" y="352" width="360" height="10" fill="#F7F1E8"/>
+    <g stroke="rgba(0,0,0,0.09)" stroke-width="1.5">
+      <line x1="0" y1="398" x2="360" y2="398"/>
+      <line x1="0" y1="440" x2="360" y2="440"/>
+      <line x1="0" y1="488" x2="360" y2="488"/>
+      <line x1="0" y1="544" x2="360" y2="544"/>
+      <line x1="0" y1="608" x2="360" y2="608"/>
+      <line x1="90" y1="362" x2="90" y2="398"/><line x1="250" y1="362" x2="250" y2="398"/>
+      <line x1="170" y1="398" x2="170" y2="440"/><line x1="40" y1="440" x2="40" y2="488"/>
+      <line x1="300" y1="440" x2="300" y2="488"/><line x1="120" y1="488" x2="120" y2="544"/>
+      <line x1="250" y1="488" x2="250" y2="544"/><line x1="60" y1="544" x2="60" y2="608"/>
+      <line x1="200" y1="544" x2="200" y2="608"/><line x1="320" y1="544" x2="320" y2="608"/>
+    </g>
+
+    <!-- چراغ سقفی -->
+    <circle cx="180" cy="62" r="70" fill="url(#gGlow)"/>
+    <line x1="180" y1="0" x2="180" y2="40" stroke="#555" stroke-width="2"/>
+    <polygon points="156,62 204,62 194,38 166,38" fill="#F2C94C"/>
+    <ellipse cx="180" cy="62" rx="24" ry="4" fill="#FFF3C4"/>
+
+    <!-- پنجره -->
+    <rect x="226" y="56" width="112" height="136" rx="3" fill="#fff"/>
+    <rect x="232" y="62" width="100" height="120" fill="url(#gSky)"/>
+    <ellipse cx="260" cy="96" rx="16" ry="7" fill="#fff" opacity=".9"/>
+    <ellipse cx="274" cy="92" rx="12" ry="6" fill="#fff" opacity=".9"/>
+    <line x1="282" y1="62" x2="282" y2="182" stroke="#fff" stroke-width="4"/>
+    <line x1="232" y1="122" x2="332" y2="122" stroke="#fff" stroke-width="4"/>
+    <rect x="220" y="192" width="124" height="7" rx="2" fill="#F7F1E8"/>
+    <rect x="212" y="48" width="140" height="5" rx="2" fill="#8A6A4A"/>
+    <rect x="218" y="52" width="22" height="144" rx="6" fill="#E7B7C4"/>
+    <rect x="326" y="52" width="22" height="144" rx="6" fill="#E7B7C4"/>
+
+    <!-- تابلو -->
+    <rect x="62" y="104" width="92" height="68" rx="3" fill="#fff" stroke="#8B5E3C" stroke-width="5"/>
+    <rect x="68" y="110" width="80" height="56" fill="#BFD9E8"/>
+    <polygon points="68,166 92,134 108,152 124,128 148,166" fill="#7FA38A"/>
+    <circle cx="132" cy="124" r="7" fill="#F5C451"/>
+
+    <!-- وسایل: هر کدام تا وقتی خریده نشوند پنهان‌اند -->
+    <g transform="translate(0,30)">
+
+      <!-- تخت -->
+      <g id="item-bed" style="display:none">
+        <ellipse cx="96" cy="426" rx="92" ry="9" fill="rgba(0,0,0,0.18)"/>
+        <rect x="18" y="250" width="156" height="100" rx="8" fill="#7E5334"/>
+        <rect x="22" y="408" width="10" height="14" fill="#6B4528"/>
+        <rect x="160" y="408" width="10" height="14" fill="#6B4528"/>
+        <rect x="12" y="338" width="168" height="72" rx="8" fill="#A97449"/>
+        <rect x="34" y="298" width="56" height="30" rx="12" fill="#fff" stroke="#E3E3E3"/>
+        <rect x="102" y="298" width="56" height="30" rx="12" fill="#fff" stroke="#E3E3E3"/>
+        <rect x="20" y="322" width="152" height="62" rx="10" fill="#E58FA8"/>
+        <rect x="20" y="322" width="152" height="18" rx="9" fill="#F4B6C8"/>
+      </g>
+
+      <!-- تلویزیون با میز -->
+      <g id="item-tv" style="display:none">
+        <ellipse cx="270" cy="366" rx="80" ry="6" fill="rgba(0,0,0,0.18)"/>
+        <rect x="200" y="316" width="140" height="48" rx="4" fill="#7A5233"/>
+        <rect x="206" y="322" width="62" height="36" rx="3" fill="#8D6140"/>
+        <rect x="272" y="322" width="62" height="36" rx="3" fill="#8D6140"/>
+        <circle cx="237" cy="340" r="2.5" fill="#E8C98A"/>
+        <circle cx="303" cy="340" r="2.5" fill="#E8C98A"/>
+        <rect x="262" y="304" width="16" height="12" fill="#2B2B2B"/>
+        <rect x="208" y="234" width="124" height="72" rx="5" fill="#14171D"/>
+        <rect x="214" y="240" width="112" height="60" rx="2" fill="url(#gScreen)"/>
+        <polygon points="214,240 252,240 214,278" fill="#fff" opacity="0.08"/>
+      </g>
+
+      <!-- کاناپه -->
+      <g id="item-sofa" style="display:none">
+        <ellipse cx="265" cy="474" rx="88" ry="9" fill="rgba(0,0,0,0.2)"/>
+        <rect x="196" y="372" width="134" height="52" rx="16" fill="#5C7FA8"/>
+        <rect x="192" y="410" width="142" height="46" rx="10" fill="#6F93BE"/>
+        <rect x="182" y="392" width="24" height="68" rx="11" fill="#4F7096"/>
+        <rect x="324" y="392" width="24" height="68" rx="11" fill="#4F7096"/>
+        <line x1="263" y1="414" x2="263" y2="452" stroke="#4F7096" stroke-width="2"/>
+        <rect x="212" y="392" width="26" height="26" rx="7" fill="#F2C94C"/>
+        <rect x="196" y="458" width="10" height="12" fill="#5A3B24"/>
+        <rect x="324" y="458" width="10" height="12" fill="#5A3B24"/>
+      </g>
+
+    </g>
+  </svg>
+
+  <button class="hud" id="shopBtn" onclick="openShop()">🛒 فروشگاه</button>
+  <div class="hud" id="balance"></div>
+
+  <div id="dim" onclick="closeShop()"></div>
+  <div id="panel">
+    <div class="phead">
+      <h2>فروشگاه</h2>
+      <button class="x" onclick="closeShop()">✕</button>
+    </div>
+    <div id="list"></div>
+    <button id="reset" onclick="resetGame()">شروع دوباره</button>
   </div>
-  <h1>خانه من 🏠</h1>
-  <div id="house"></div>
-  <h2>فروشگاه</h2>
-  <div id="shop"></div>
 
   <script>
-    Telegram.WebApp.ready();
-    Telegram.WebApp.expand();
+    const tg = window.Telegram ? window.Telegram.WebApp : null;
+    if (tg) {
+      tg.ready();
+      tg.expand();
+    }
+    const canSave = tg && tg.initData && tg.isVersionAtLeast("6.9");
 
-    let balance = 1000000;
+    const START = 1000000;
+    let balance = START;
     let owned = [];
 
     const items = [
-      { name: "کاناپه", icon: "🛋️", price: 250000 },
-      { name: "تخت", icon: "🛏️", price: 300000 },
-      { name: "تلویزیون", icon: "📺", price: 180000 }
+      { id: "bed",  name: "تخت",      icon: "🛏️", price: 300000 },
+      { id: "sofa", name: "کاناپه",   icon: "🛋️", price: 250000 },
+      { id: "tv",   name: "تلویزیون", icon: "📺", price: 180000 }
     ];
 
-    function buy(index) {
-      const item = items[index];
-      if (owned.includes(index)) return;
-      if (balance < item.price) {
-        Telegram.WebApp.showAlert("پول کافی نیست");
-        return;
+    function save() {
+      if (canSave) {
+        tg.CloudStorage.setItem("game2", JSON.stringify({ balance: balance, owned: owned }));
       }
-      balance = balance - item.price;
-      owned.push(index);
-      draw();
     }
 
-    function draw() {
-      document.getElementById("balance").textContent =
-        balance.toLocaleString("fa-IR") + " تومان";
-
-      const house = document.getElementById("house");
-      if (owned.length === 0) {
-        house.textContent = "خانه خالی است";
-        house.style.fontSize = "16px";
+    function load() {
+      if (canSave) {
+        tg.CloudStorage.getItem("game2", function (err, value) {
+          if (!err && value) {
+            try {
+              const d = JSON.parse(value);
+              balance = d.balance;
+              owned = d.owned;
+            } catch (e) {}
+          }
+          drawAll();
+        });
       } else {
-        house.textContent = owned.map(i => items[i].icon).join(" ");
-        house.style.fontSize = "48px";
+        drawAll();
       }
-
-      document.getElementById("shop").innerHTML = items.map((item, i) => `
-        <div class="item">
-          <span>${item.icon} ${item.name}<br>${item.price.toLocaleString("fa-IR")} تومان</span>
-          <button onclick="buy(${i})">${owned.includes(i) ? "خریده‌ای" : "بخر"}</button>
-        </div>
-      `).join("");
     }
 
-    draw();
+    function openShop() {
+      document.getElementById("panel").classList.add("open");
+      document.getElementById("dim").classList.add("open");
+    }
+    function closeShop() {
+      document.getElementById("panel").classList.remove("open");
+      document.getElementById("dim").classList.remove("open");
+    }
+
+    function buy(id) {
+      const item = items.find(i => i.id === id);
+      if (!item || owned.includes(id) || balance < item.price) return;
+      balance = balance - item.price;
+      owned.push(id);
+      save();
+      drawAll(id);
+      closeShop();
+      if (tg && tg.HapticFeedback) tg.HapticFeedback.notificationOccurred("success");
+    }
+
+    function resetGame() {
+      balance = START;
+      owned = [];
+      save();
+      drawAll();
+    }
+
+    function drawAll(newId) {
+      document.getElementById("balance").textContent =
+        "🪙 " + balance.toLocaleString("fa-IR") + " تومان";
+
+      items.forEach(function (item) {
+        const el = document.getElementById("item-" + item.id);
+        const has = owned.includes(item.id);
+        el.style.display = has ? "" : "none";
+        el.classList.remove("drop");
+        if (has && item.id === newId) {
+          void el.getBoundingClientRect();
+          el.classList.add("drop");
+        }
+      });
+
+      document.getElementById("list").innerHTML = items.map(function (item) {
+        const has = owned.includes(item.id);
+        const poor = balance < item.price;
+        const label = has ? "خریده‌ای ✓" : poor ? "پول کافی نیست" : "بخر";
+        return `
+          <div class="item">
+            <div class="icon">${item.icon}</div>
+            <div class="info">
+              <div>${item.name}</div>
+              <div class="price">${item.price.toLocaleString("fa-IR")} تومان</div>
+            </div>
+            <button class="buy" onclick="buy('${item.id}')" ${has || poor ? "disabled" : ""}>${label}</button>
+          </div>`;
+      }).join("");
+    }
+
+    load();
   </script>
 </body>
 </html>
